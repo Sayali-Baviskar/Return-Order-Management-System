@@ -1,114 +1,213 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
+using MVC_UI.Models;
+using Newtonsoft.Json;
+using System;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading.Tasks;
-using wwe.Models;
 
-namespace wwe.Controllers
+namespace MVC_UI.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class UsersController : ControllerBase
+    public class UsersController : Controller
     {
-        private readonly WweContext _context;
+        private readonly AppDbContext _context;
 
-        public UsersController(WweContext context)
+        public UsersController(AppDbContext context)
         {
             _context = context;
         }
 
-        [Authorize("Admin")]
-        // GET: api/Users
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<User>>> GetUsers()
+        public IActionResult LogOut()
         {
-            return await _context.Users.ToListAsync();
+            HttpContext.Session.SetString("Username", "");
+            return View();
+        }
+        public IActionResult Welcome()
+        {
+            var user = HttpContext.Session.GetString("Username");
+            ViewBag.Username = user;
+            return View();
+        }
+        public IActionResult WelcomeAdmin()
+        {
+            var user = HttpContext.Session.GetString("Username");
+            ViewBag.Username = user;
+            return View();
+        }
+        // GET: Users/Login
+        public IActionResult Login()
+        {
+            return View();
+        }
+        // POST: Users/Login       
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public ActionResult Login(User user)
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri("https://localhost:44380");
+
+                string u = JsonConvert.SerializeObject(user);
+                var contentData = new StringContent(u, System.Text.Encoding.UTF8, "application/json");
+
+                HttpResponseMessage response = client.PostAsync("/Login", contentData).Result;
+                //ViewBag.Message = response.Content.ReadAsStringAsync().Result;
+                string result = response.Content.ReadAsStringAsync().Result;
+
+                if (!result.Equals("Unauthorized"))
+                {
+                    HttpContext.Session.SetString("token", result);
+                    HttpContext.Session.SetString("Username", user.UserName);
+                    if (user.UserName == "Admin")
+                        return RedirectToAction("WelcomeAdmin");
+                    else
+                        return RedirectToAction("Welcome");
+                }
+                else
+                    ViewBag.Mystm = "Wrong Crediatials";
+                return View();
+            }
+        }
+        // GET: Users
+        public async Task<IActionResult> Index()
+        {
+            return View(await _context.Users.ToListAsync());
         }
 
-        [Authorize("Admin")]
-        // GET: api/Users/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<User>> GetUser(int id)
+        // GET: Users/Details/5
+        public async Task<IActionResult> Details(int? id)
         {
-            var user = await _context.Users.FindAsync(id);
+            if (id == null)
+            {
+                return NotFound();
+            }
 
+            var user = await _context.Users
+                .FirstOrDefaultAsync(m => m.UserID == id);
             if (user == null)
             {
                 return NotFound();
             }
 
-            return user;
+            return View(user);
         }
 
-        [Authorize("Admin", "User")]
-        // PUT: api/Users/5        
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutUser(int id, User user)
+        // GET: Users/Create
+        public IActionResult Create()
+        {
+            return View();
+        }
+
+        // POST: Users/Create        
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public ActionResult Create(User user)
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri("https://localhost:44380");
+
+                string tokenG = HttpContext.Session.GetString("token");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
+
+                string stringData = JsonConvert.SerializeObject(user);
+                var contentData = new StringContent(stringData, System.Text.Encoding.UTF8, "application/json");
+                HttpResponseMessage response = client.PostAsync("/api/Users", contentData).Result;
+                ViewBag.Message = response.Content.ReadAsStringAsync().Result;
+                return View();
+            }
+
+            //if (ModelState.IsValid)
+            //{
+            //    _context.Add(user);
+            //    await _context.SaveChangesAsync();
+            //    return RedirectToAction(nameof(Index));
+            //}
+            //return View(user);
+        }
+
+        // GET: Users/Edit/5
+        public async Task<IActionResult> Edit(int? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound();
+            }
+            return View(user);
+        }
+
+        // POST: Users/Edit/5        
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(int id, [Bind("UserID,UserName,Password")] User user)
         {
             if (id != user.UserID)
             {
-                return BadRequest();
+                return NotFound();
             }
 
-            _context.Entry(user).State = EntityState.Modified;
-
-            try
+            if (ModelState.IsValid)
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!UserExistsId(id))
+                try
                 {
-                    return NotFound();
+                    _context.Update(user);
+                    await _context.SaveChangesAsync();
                 }
-                else
+                catch (DbUpdateConcurrencyException)
                 {
-                    throw;
+                    if (!UserExists(user.UserID))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
                 }
+                return RedirectToAction(nameof(Index));
             }
-
-            return NoContent();
+            return View(user);
         }
 
-        [AllowAnonymous]
-        // POST: api/Users        
-        [HttpPost]
-        public async Task<ActionResult<User>> PostUser(User user)
+        // GET: Users/Delete/5
+        public async Task<IActionResult> Delete(int? id)
         {
-            if (!UserExists(user.UserName))
+            if (id == null)
             {
-                _context.Users.Add(user);
-                await _context.SaveChangesAsync();
-                return Content("Success");
+                return NotFound();
             }
-            return Content("User already exists");
-        }
 
-        [Authorize("Admin")]
-        // DELETE: api/Users/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteUser(int id)
-        {
-            var user = await _context.Users.FindAsync(id);
+            var user = await _context.Users
+                .FirstOrDefaultAsync(m => m.UserID == id);
             if (user == null)
             {
                 return NotFound();
             }
 
+            return View(user);
+        }
+
+        // POST: Users/Delete/5
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteConfirmed(int id)
+        {
+            var user = await _context.Users.FindAsync(id);
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
-
-            return NoContent();
+            return RedirectToAction(nameof(Index));
         }
-
-        private bool UserExists(string uname)
-        {
-            return _context.Users.Any(e => e.UserName == uname);
-        }
-        private bool UserExistsId(int id)
+        private bool UserExists(int id)
         {
             return _context.Users.Any(e => e.UserID == id);
         }

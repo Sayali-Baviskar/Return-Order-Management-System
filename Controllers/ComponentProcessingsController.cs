@@ -1,93 +1,157 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using MVC_UI.Models;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using wwe.Models;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Threading.Tasks;
 
-namespace wwe.Controllers
+namespace MVC_UI.Controllers
 {
-    [Authorize("Admin", "User")]
-    [Route("api/[controller]")]
-    [ApiController]
-    public class ComponentProcessingsController : ControllerBase
+    public class ComponentProcessingsController : Controller
     {
-        private readonly WweContext _context;
-        public ComponentProcessingsController(WweContext context)
+        private readonly AppDbContext _context;
+        public ComponentProcessingsController(AppDbContext context)
         {
             _context = context;
         }
 
-        // GET: api/[controller]/Get
-        [HttpGet]
-        public IEnumerable<ComponentProcessing> Get()
+        private string tokenG;
+
+        // GET: Orders
+        public ActionResult Index()
         {
-            return _context.ComponentProcessings.ToList();
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri("https://localhost:44380");
+                MediaTypeWithQualityHeaderValue contentType = new MediaTypeWithQualityHeaderValue("application/json");
+
+                tokenG = HttpContext.Session.GetString("token");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
+
+                HttpResponseMessage response = client.GetAsync("/api/ComponentProcessings").Result;
+                string stringData = response.Content.ReadAsStringAsync().Result;
+                List<ComponentProcessing> data = JsonConvert.DeserializeObject<List<ComponentProcessing>>(stringData);
+                return View(data);
+            }
         }
 
+        // GET: Orders/Details/5
+        public async Task<IActionResult> Details(int? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var component = await _context.componentProcessings.FirstOrDefaultAsync(m => m.RequestId == id);
+            if (component == null)
+            {
+                return NotFound();
+            }
+
+            return View(component);
+        }
+
+        // GET: Orders/Create
+        public ActionResult Create()
+        {
+            return View();
+        }
+
+        // POST: Orders/Create
         [HttpPost]
-        public void Post([FromBody] ComponentProcessing value)
+        public ActionResult Create(ComponentProcessing obj)
         {
-            _context.ComponentProcessings.Add(value);
-            var processresponce = new ProcessResponse();
-            var payment = new Payment();
-            processresponce.Name = value.Name;
-            value.OrderPlacedDate = DateTime.UtcNow;
-            var random = new Random();
-            value.RequestId = random.Next(9999, 99999);
-            payment.Name = value.Name;
-            payment.CreditCardNumber = value.CreditCardNumber;
-
-            if (value.IsPriorityRequest && value.ComponentType == "Integral")
+            using (HttpClient client = new HttpClient())
             {
-                processresponce.ProcessingCharge = 700;   //prcoess charge
-                processresponce.DateOfDelivery = value.OrderPlacedDate.AddDays(2);
-                payment.ProcessingCharge = 700;   //prcoess charge
+                obj.Name = HttpContext.Session.GetString("Username");
+                client.BaseAddress = new Uri("https://localhost:44380");
 
-            }
-            else 
-            {
-                processresponce.ProcessingCharge = 500;
-                payment.ProcessingCharge = 500;
-                processresponce.DateOfDelivery = value.OrderPlacedDate.AddDays(5);
-            }
-            if(value.ComponentType == "Accessory")
-            {
-                processresponce.ProcessingCharge = 300;
-                payment.ProcessingCharge = 300;
-                processresponce.DateOfDelivery = value.OrderPlacedDate.AddDays(5);
-            }
+                tokenG = HttpContext.Session.GetString("token");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
 
-            if (value.ComponentType == "Integral")
-            {
-                processresponce.PackagingAndDeliveryCharge = 300;    //packing and delivary charges
-                payment.PackagingAndDeliveryCharge = 300;
+                string stringData = JsonConvert.SerializeObject(obj);
+                var contentData = new StringContent(stringData, System.Text.Encoding.UTF8, "application/json");
+                HttpResponseMessage response = client.PostAsync("/api/ComponentProcessings", contentData).Result;
+                ViewBag.Message = response.Content.ReadAsStringAsync().Result;
+                if (response.IsSuccessStatusCode)
+                    ViewBag.Message = "Success";
+                return View(obj);
             }
-            else
-            {
-                processresponce.PackagingAndDeliveryCharge = 150;
-                payment.PackagingAndDeliveryCharge = 150;
-            }
-            payment.PaymentStatus = false;
-
-            processresponce.TotalCharge = value.Quantity * (processresponce.PackagingAndDeliveryCharge + processresponce.ProcessingCharge);
-            payment.TotalCharge = processresponce.TotalCharge;
-
-            _context.ComponentProcessings.Add(value);
-            _context.Payments.Add(payment);
-            _context.ProcessResponses.Add(processresponce);
-            _context.SaveChanges();
         }
 
-        [HttpDelete("{id}")]
-        public void Delete(int id)
+        // GET: Orders/Edit/5
+        public ActionResult Edit(string id)
         {
-            var order = _context.ComponentProcessings.Where(m => m.RequestId == id).FirstOrDefault();
-            var order1 = _context.Payments.Where(m => m.RequestId == id).FirstOrDefault();
-            var order2 = _context.ProcessResponses.Where(m => m.RequestId == id).FirstOrDefault();
-            _context.ComponentProcessings.Remove(order);
-            _context.ProcessResponses.Remove(order2);
-            _context.Payments.Remove(order1);
-            _context.SaveChanges();
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri("https://localhost:44380");
+
+                tokenG = HttpContext.Session.GetString("token");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
+
+                HttpResponseMessage response = client.GetAsync("/api/ComponentProcessings/" + id).Result;
+                string stringData = response.Content.ReadAsStringAsync().Result;
+                ComponentProcessing data = JsonConvert.DeserializeObject<ComponentProcessing>(stringData);
+                return View(data);
+            }
+        }
+
+        // POST: Orders/Edit/5
+        [HttpPost]
+        public ActionResult Edit(ComponentProcessing obj)
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri("https://localhost:44380");
+
+                tokenG = HttpContext.Session.GetString("token");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
+
+                string stringData = JsonConvert.SerializeObject(obj);
+                var contentData = new StringContent(stringData, System.Text.Encoding.UTF8, "application/json");
+                HttpResponseMessage response = client.PutAsync("/api/ComponentProcessings/" + obj.RequestId, contentData).Result;
+                ViewBag.Message = response.Content.ReadAsStringAsync().Result;
+                return View(obj);
+            }
+        }
+
+        // GET: Orders/Delete/5
+        public ActionResult Delete(int id)
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri("https://localhost:44380");
+
+                tokenG = HttpContext.Session.GetString("token");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
+
+                HttpResponseMessage response = client.DeleteAsync("/api/ComponentProcessings/" + id).Result;
+                TempData["Message"] = response.Content.ReadAsStringAsync().Result;
+                return RedirectToAction("Index", "Payments");
+            }
+        }
+
+        // POST: Orders/Delete/5
+        [HttpPost]
+        public ActionResult DeleteConfirmed(int id)
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri("https://localhost:44380");
+
+                tokenG = HttpContext.Session.GetString("token");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
+
+                HttpResponseMessage response = client.GetAsync("/api/ComponentProcessings/" + id).Result;
+                string stringData = response.Content.ReadAsStringAsync().Result;
+                ComponentProcessing data = JsonConvert.DeserializeObject<ComponentProcessing>(stringData);
+                return View(data);
+            }
         }
     }
 }

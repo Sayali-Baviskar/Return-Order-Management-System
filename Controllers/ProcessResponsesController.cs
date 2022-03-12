@@ -11,18 +11,16 @@ using System.Threading.Tasks;
 
 namespace MVC_UI.Controllers
 {
-    public class PaymentsController : Controller
+    public class ProcessResponsesController : Controller
     {
         private readonly AppDbContext _context;
-
-        public PaymentsController(AppDbContext context)
+        private string tokenG;
+        public ProcessResponsesController(AppDbContext context)
         {
             _context = context;
         }
 
-        private string tokenG;
-
-        // GET: All
+        //GET: All Data
         public ActionResult AIndex()
         {
             using (HttpClient client = new HttpClient())
@@ -30,27 +28,26 @@ namespace MVC_UI.Controllers
                 client.BaseAddress = new Uri("https://localhost:44380");
 
                 tokenG = HttpContext.Session.GetString("token");
-
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
 
                 MediaTypeWithQualityHeaderValue contentType = new MediaTypeWithQualityHeaderValue("application/json");
                 client.DefaultRequestHeaders.Accept.Add(contentType);
-                HttpResponseMessage response = client.GetAsync("/api/Payments").Result;
+                HttpResponseMessage response = client.GetAsync("/api/Package").Result;
                 string stringData = response.Content.ReadAsStringAsync().Result;
-
                 try
                 {
-                    List<Payment> data = JsonConvert.DeserializeObject<List<Payment>>(stringData);
+                    List<ProcessResponse> data = JsonConvert.DeserializeObject<List<ProcessResponse>>(stringData);
                     return View(data);
                 }
                 catch (Exception e)
                 {
                     return RedirectToAction("Error", "Home", e);
                 }
+
             }
         }
 
-        // GET: For logged in user only
+        // GET: Package for Logged in User
         public ActionResult Index()
         {
             using (HttpClient client = new HttpClient())
@@ -64,18 +61,20 @@ namespace MVC_UI.Controllers
 
                 MediaTypeWithQualityHeaderValue contentType = new MediaTypeWithQualityHeaderValue("application/json");
                 client.DefaultRequestHeaders.Accept.Add(contentType);
-                HttpResponseMessage response = client.GetAsync("/api/Payments/" + uname).Result;
+
+                HttpResponseMessage response = client.GetAsync("/api/Package/" + uname).Result;
                 string stringData = response.Content.ReadAsStringAsync().Result;
 
                 try
                 {
-                    List<Payment> data = JsonConvert.DeserializeObject<List<Payment>>(stringData);
+                    List<ProcessResponse> data = JsonConvert.DeserializeObject<List<ProcessResponse>>(stringData);
                     return View(data);
                 }
                 catch (Exception e)
                 {
                     return RedirectToAction("Error", "Home", e);
                 }
+
             }
         }
 
@@ -87,7 +86,7 @@ namespace MVC_UI.Controllers
                 return NotFound();
             }
 
-            var student = await _context.payments.FirstOrDefaultAsync(m => m.RequestId == id);
+            var student = await _context.processResponses.FirstOrDefaultAsync(m => m.RequestId == id);
             if (student == null)
             {
                 return NotFound();
@@ -104,7 +103,7 @@ namespace MVC_UI.Controllers
 
         // POST: Orders/Create
         [HttpPost]
-        public ActionResult Create(Payment obj)
+        public ActionResult Create(ProcessResponse obj)
         {
             using (HttpClient client = new HttpClient())
             {
@@ -112,17 +111,17 @@ namespace MVC_UI.Controllers
 
                 tokenG = HttpContext.Session.GetString("token");
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
-                obj.Name = HttpContext.Session.GetString("Username");
+
                 string stringData = JsonConvert.SerializeObject(obj);
                 var contentData = new StringContent(stringData, System.Text.Encoding.UTF8, "application/json");
-                HttpResponseMessage response = client.PostAsync("/api/Payments", contentData).Result;
+                HttpResponseMessage response = client.PostAsync("/api/Package", contentData).Result;
                 ViewBag.Message = response.Content.ReadAsStringAsync().Result;
                 return View(obj);
             }
         }
 
         // GET: Orders/Edit/5
-        public ActionResult Edit(int id)
+        public ActionResult Edit(string id)
         {
             using (HttpClient client = new HttpClient())
             {
@@ -131,16 +130,16 @@ namespace MVC_UI.Controllers
                 tokenG = HttpContext.Session.GetString("token");
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
 
-                HttpResponseMessage response = client.GetAsync("/Edit/" + id).Result;
+                HttpResponseMessage response = client.GetAsync("/api/ComponentProcessings/" + id).Result;
                 string stringData = response.Content.ReadAsStringAsync().Result;
-                Payment data = JsonConvert.DeserializeObject<Payment>(stringData);
+                ProcessResponse data = JsonConvert.DeserializeObject<ProcessResponse>(stringData);
                 return View(data);
             }
         }
 
         // POST: Orders/Edit/5
         [HttpPost]
-        public ActionResult Edit(Payment obj)
+        public ActionResult Edit(ProcessResponse obj)
         {
             using (HttpClient client = new HttpClient())
             {
@@ -151,10 +150,8 @@ namespace MVC_UI.Controllers
 
                 string stringData = JsonConvert.SerializeObject(obj);
                 var contentData = new StringContent(stringData, System.Text.Encoding.UTF8, "application/json");
-                HttpResponseMessage response = client.PutAsync("/Edit/" + obj.RequestId, contentData).Result;
+                HttpResponseMessage response = client.PutAsync("/api/Package/" + obj.RequestId, contentData).Result;
                 ViewBag.Message = response.Content.ReadAsStringAsync().Result;
-                if (response.IsSuccessStatusCode)
-                    ViewBag.Message = "Success";
                 return View(obj);
             }
         }
@@ -169,7 +166,7 @@ namespace MVC_UI.Controllers
                 tokenG = HttpContext.Session.GetString("token");
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
 
-                HttpResponseMessage response = client.DeleteAsync("/api/Payments/" + id).Result;
+                HttpResponseMessage response = client.DeleteAsync("/api/Package/" + id).Result;
                 TempData["Message"] = response.Content.ReadAsStringAsync().Result;
                 return RedirectToAction("Index");
             }
@@ -186,9 +183,9 @@ namespace MVC_UI.Controllers
                 tokenG = HttpContext.Session.GetString("token");
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenG);
 
-                HttpResponseMessage response = client.GetAsync("/api/Payments/" + id).Result;
+                HttpResponseMessage response = client.GetAsync("/api/Package/" + id).Result;
                 string stringData = response.Content.ReadAsStringAsync().Result;
-                Payment data = JsonConvert.DeserializeObject<Payment>(stringData);
+                ProcessResponse data = JsonConvert.DeserializeObject<ProcessResponse>(stringData);
                 return View(data);
             }
         }
